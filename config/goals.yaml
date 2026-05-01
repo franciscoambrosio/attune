@@ -1,0 +1,19 @@
+# Edit this file with your own goals in natural language.
+# The more specific you are, the better Attune will triage for you.
+#
+# Good goals include: what you're working toward, what kind of
+# messages are critical, and any relevant deadlines.
+
+goals:
+  - I am finishing my PhD thesis. My defense is in July 2026.
+    Feedback from my supervisor and messages from my thesis committee are critical.
+    Anything related to the viva, defense scheduling, or thesis corrections is high priority.
+
+  - I am actively applying for postdoc positions and research grants.
+    Funding decisions, grant deadlines, and interview invitations are urgent.
+
+  - I am building a side project with a collaborator.
+    Messages about the project are important, especially around technical decisions.
+
+  - Physical activity and social plans with close friends matter for my wellbeing.
+    Let those messages through, but they are rarely urgent.
