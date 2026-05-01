@@ -79,37 +79,116 @@ This lets the agent reason: *"Your deadline is in 12 days and you're fully booke
 
 ---
 
+## How a decision is made
+
+Here's a concrete example of how the system reasons about a single email:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  CALENDAR CONTEXT                                       │
+│                                                         │
+│  Today (Fri): moderate — 3.5h blocked                  │
+│    10:00 Thesis writing block                           │
+│    14:00 Lab meeting                                    │
+│    16:00 Supervisor check-in                            │
+│                                                         │
+│  Week ahead:  Sat:L  Sun:L  Mon:L  Tue:H  Wed:M  Thu:M │
+│                                                         │
+│  Milestones:  Veni grant deadline      →  2 days away  │
+│               Chapter 3 submission     →  3 days away  │
+│               Thesis committee review  → 18 days away  │
+│               PhD defense              → 74 days away  │
+└─────────────────────────────────────────────────────────┘
+                           +
+┌─────────────────────────────────────────────────────────┐
+│  GOALS                                                  │
+│                                                         │
+│  • Finishing PhD thesis — defense July 2026             │
+│    Supervisor and committee feedback are critical       │
+│  • Applying for postdoc positions and grants            │
+│    Funding deadlines are urgent                         │
+└─────────────────────────────────────────────────────────┘
+                           +
+┌─────────────────────────────────────────────────────────┐
+│  INCOMING EMAIL                                         │
+│                                                         │
+│  From:    supervisor@university.edu                     │
+│  Subject: Chapter 3 feedback — revise before Thursday  │
+│  Body:    "...fix statistical analysis in 3.2...        │
+│            committee meets Friday, need it by           │
+│            Thursday morning at the latest..."           │
+└─────────────────────────────────────────────────────────┘
+                           ↓
+                    [ TriageAgent ]
+                           ↓
+┌─────────────────────────────────────────────────────────┐
+│  🔴 URGENT                                              │
+│                                                         │
+│  Action required (revision) + deadline is Thursday,    │
+│  3 days away. Committee slot is at risk. With defense   │
+│  in 74 days, supervisor sign-off is on the critical    │
+│  path. Delay has real cost.                             │
+│                                                         │
+│  → Desktop notification sent                           │
+└─────────────────────────────────────────────────────────┘
+```
+
+The same email with a different calendar context would get a different label:
+
+```
+  Milestones: PhD defense → 8 months away (not 74 days)
+              Chapter 3 submission → not yet scheduled
+
+  → 🟡 SOON   Supervisor feedback is valuable but not on the
+              critical path yet. Read today, no need to stop
+              everything.
+```
+
+Same email. Different context. Different label.
+
+---
+
 ## Preliminary results (mock run)
 
-Running `attune digest --mock` against 8 realistic emails with a simulated calendar
-(committee review in 18 days, grant deadline in 2 days, final review in 74 days):
+Running `attune digest --mock` against 25 realistic emails with a simulated PhD student calendar:
 
 ```
-── TODAY'S DIGEST (Fri May 1) ────────────────────────────
-  Today: moderate  ·  Week ahead: L H L M L L L
-  Milestones: Veni grant deadline in 2d  ·  Chapter 3 in 3d  ·  PhD defense in 74d
-
-  🔴 URGENT   Research Foundation · Veni Grant portal closes in 48 hours
-             → Grant deadline in 2 days, late submissions not accepted
+── TODAY'S DIGEST (Fri May 1) ──────────────────────────────────
+  Today: moderate  ·  Week ahead: L H M M L L L
+  Milestones: Veni grant in 2d · Chapter 3 in 3d · Postdoc in 4d · ICML in 5d · Defense in 74d
 
   🔴 URGENT   Prof. Martinez · Chapter 3 feedback — revise before Thursday
-             → Revision needed before committee review in 18 days and defense in 74 days
+             → Action required + committee slot at risk, deadline in 3 days
 
-  🟡 SOON     Dr. Sarah Chen · Postdoc position — still interested?
-             → Action required: send CV + research statement before next week
+  🔴 URGENT   Research Foundation · Veni grant portal closes in 48 hours
+             → Grant deadline in 2 days, incomplete applications not reviewed
 
-  🔵 LATER    Jamie · Attune — idea for the reranker architecture
-             → Project discussion, no deadline pressure
+  🔴 URGENT   Dr. Sarah Chen · Postdoc position — need to know by Friday
+             → Postdoc application deadline in 4 days, competitive opportunity
 
-  🔵 LATER    University Library · Loan due in 3 days
-             → No impact on thesis or grant deadlines
+  🟡 SOON     ICML 2026 · Paper submission deadline — 5 days remaining
+             → Submission required, deadline in 5 days
 
-  ⚪ IGNORE   Medium Daily Digest · 5 AI papers this week
-────────────────────────────────────────────────────────────
-  8 emails  ·  2 urgent · 1 read today · 2 this week · 1 ignored
+  🟡 SOON     JMLR · Review request: manuscript #4821 — respond within 3 days
+             → Accept/decline required within 3 days
+
+  🔵 LATER    Jamie · Attune — reranker idea, worth a call this week?
+             → Side project discussion, no deadline pressure
+
+  🔵 LATER    Anna Kowalski · Collaboration on causal inference
+             → Interesting but no deadline given current milestones
+
+  🔵 LATER    Grants Office · Travel grant — open until May 31
+             → Worthwhile but deadline is 30 days away
+
+  ⚪ IGNORE   Medium · 5 AI papers you should read this week
+  ⚪ IGNORE   LinkedIn · You appeared in 14 searches this week
+  ⚪ IGNORE   Arxiv · cs.LG — 47 new submissions
+  ⚪ IGNORE   Canteen Services · This week's lunch menu
+  ... (and 13 more)
+────────────────────────────────────────────────────────────────
+  25 emails  ·  3 urgent · 2 read today · 8 this week · 12 ignored
 ```
-
-The reasoning is goal-linked — every label references a specific goal or deadline, not just the email content.
 
 ---
 
