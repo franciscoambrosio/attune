@@ -8,7 +8,7 @@ Attune reads your Gmail and Google Calendar, then uses an LLM to label every ema
 
 ## The core idea
 
-Existing tools (Superhuman, Gmail filters) treat urgency as a property of the sender or subject. It isn't.
+Existing tools treat urgency as a property of the sender or subject. It isn't.
 
 The same email from your supervisor can be:
 
