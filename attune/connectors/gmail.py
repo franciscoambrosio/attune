@@ -1,6 +1,7 @@
 import base64
 import os
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -41,6 +42,40 @@ def fetch_emails_since(after_ts: int, max_results: int = 50) -> list[Email]:
         userId="me",
         q=f"is:unread after:{after_ts}",
         maxResults=max_results,
+    ).execute()
+
+    messages = result.get("messages", [])
+    emails = []
+
+    for msg in messages:
+        full = service.users().messages().get(
+            userId="me", messageId=msg["id"], format="full"
+        ).execute()
+
+        headers = {h["name"]: h["value"] for h in full["payload"]["headers"]}
+        body = _extract_body(full["payload"])
+
+        emails.append(Email(
+            id=msg["id"],
+            sender=headers.get("From", ""),
+            subject=headers.get("Subject", "(no subject)"),
+            body=body[:2000],
+            timestamp=headers.get("Date", ""),
+        ))
+
+    return emails
+
+
+def fetch_emails_since_date(days: int = 30, max_results: int = 100) -> list[Email]:
+    """Fetch emails from the last N days (for history/retrieval context)."""
+    creds = _get_credentials()
+    service = build("gmail", "v1", credentials=creds)
+
+    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y/%m/%d")
+    query = f"after:{cutoff_date}"
+
+    result = service.users().messages().list(
+        userId="me", q=query, maxResults=max_results
     ).execute()
 
     messages = result.get("messages", [])

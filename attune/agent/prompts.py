@@ -21,7 +21,7 @@ Respond with valid JSON only:
 {{"label": "URGENT|SOON|LATER|IGNORE", "reasoning": "one sentence referencing a specific goal or deadline"}}"""
 
 
-def format_user_prompt(email, context) -> str:
+def format_user_prompt(email, context, past_emails=None) -> str:
     week = " · ".join(
         f"{d.date[5:]}:{d.busyness[0].upper()}" for d in context.week_ahead
     )
@@ -30,13 +30,25 @@ def format_user_prompt(email, context) -> str:
         or "none"
     )
 
-    return f"""CALENDAR CONTEXT:
+    prompt = f"""CALENDAR CONTEXT:
   Today ({context.today.date}): {context.today.busyness} — {context.today.hours_blocked}h blocked
   Events: {", ".join(context.today.events) or "none"}
   Week ahead: {week}
   Upcoming milestones: {milestones}
 
-FROM: {email.sender}
+"""
+
+    if past_emails:
+        from attune.retrieval import format_email_summary
+        history_lines = [f"  - {format_email_summary(e)}" for e in past_emails]
+        prompt += f"""RELEVANT HISTORY:
+{chr(10).join(history_lines)}
+
+"""
+
+    prompt += f"""FROM: {email.sender}
 SUBJECT: {email.subject}
 BODY:
 {email.body[:1500]}"""
+
+    return prompt
