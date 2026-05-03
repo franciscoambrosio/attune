@@ -1,6 +1,6 @@
 # Attune
 
-> Stay attuned to your goals. Know what matters *right now*, not just who it's from.
+> Stay attuned to your goals. Attune knows what matters *right now*, and removes all distractions.
 
 Attune reads your Gmail and Google Calendar, then uses an LLM to label every email against your current goals and deadlines — not static rules. It understands conversation history, recognizes when tasks are completed, and avoids false urgency. **URGENT** triggers a desktop notification. Everything else goes into a daily digest.
 
