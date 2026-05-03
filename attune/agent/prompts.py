@@ -1,3 +1,5 @@
+from attune.models.email import Email
+
 SYSTEM_PROMPT = """You are Attune, a personal message triage assistant.
 
 Your job: decide how urgently the user needs to act on each email, \
@@ -17,8 +19,20 @@ Rules for URGENT: only assign if BOTH conditions hold:
 1. The email requires an action from the user (not just informational)
 2. Waiting even a day has meaningful negative consequences given upcoming milestones
 
+When RELEVANT HISTORY is provided, use it to inform your judgment:
+- If a prior email shows the task is already completed, downgrade urgency.
+- If a follow-up is escalating on the same thread, maintain or raise urgency.
+- Confirmation receipts after completed actions are LATER or IGNORE.
+
 Respond with valid JSON only:
 {{"label": "URGENT|SOON|LATER|IGNORE", "reasoning": "one sentence referencing a specific goal or deadline"}}"""
+
+
+def format_email_summary(email: Email) -> str:
+    date_str = email.timestamp.split("T")[0] if "T" in email.timestamp else email.timestamp
+    subject = email.subject[:60] + "..." if len(email.subject) > 60 else email.subject
+    sender_name = email.sender.split("<")[0].strip() if "<" in email.sender else email.sender
+    return f"From: {sender_name} on {date_str}: {subject}"
 
 
 def format_user_prompt(email, context, past_emails=None) -> str:
@@ -30,25 +44,23 @@ def format_user_prompt(email, context, past_emails=None) -> str:
         or "none"
     )
 
-    prompt = f"""CALENDAR CONTEXT:
-  Today ({context.today.date}): {context.today.busyness} — {context.today.hours_blocked}h blocked
-  Events: {", ".join(context.today.events) or "none"}
-  Week ahead: {week}
-  Upcoming milestones: {milestones}
-
-"""
+    parts = [
+        f"CALENDAR CONTEXT:\n"
+        f"  Today ({context.today.date}): {context.today.busyness} — {context.today.hours_blocked}h blocked\n"
+        f"  Events: {', '.join(context.today.events) or 'none'}\n"
+        f"  Week ahead: {week}\n"
+        f"  Upcoming milestones: {milestones}\n"
+    ]
 
     if past_emails:
-        from attune.retrieval import format_email_summary
         history_lines = [f"  - {format_email_summary(e)}" for e in past_emails]
-        prompt += f"""RELEVANT HISTORY:
-{chr(10).join(history_lines)}
+        parts.append("RELEVANT HISTORY:\n" + "\n".join(history_lines) + "\n")
 
-"""
+    parts.append(
+        f"FROM: {email.sender}\n"
+        f"SUBJECT: {email.subject}\n"
+        f"BODY:\n"
+        f"{email.body[:1500]}"
+    )
 
-    prompt += f"""FROM: {email.sender}
-SUBJECT: {email.subject}
-BODY:
-{email.body[:1500]}"""
-
-    return prompt
+    return "\n".join(parts)

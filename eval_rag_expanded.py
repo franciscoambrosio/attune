@@ -5,7 +5,7 @@ Extended test set with 26 emails across 12 realistic threads
 
 from dataclasses import dataclass
 from attune.models.email import Email, TriageLabel
-from attune.agent.prompts import format_user_prompt
+from attune.agent.prompts import format_user_prompt, format_email_summary
 from attune.models.context import CalendarContext, DayBusyness, Milestone
 from attune.retrieval import retrieve_similar_emails, embed_and_cache_emails
 

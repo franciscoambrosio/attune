@@ -7,34 +7,35 @@ from attune.models.email import Email
 CACHE_DIR = Path.home() / ".attune"
 CACHE_DB = CACHE_DIR / "email_cache.db"
 
+_conn: Optional[sqlite3.Connection] = None
+
+
+def _get_conn() -> sqlite3.Connection:
+    global _conn
+    if _conn is None:
+        CACHE_DIR.mkdir(exist_ok=True)
+        _conn = sqlite3.connect(CACHE_DB)
+        _conn.execute("""
+            CREATE TABLE IF NOT EXISTS email_embeddings (
+                email_id TEXT PRIMARY KEY,
+                sender TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                body_preview TEXT,
+                embedding BLOB NOT NULL,
+                timestamp TEXT NOT NULL
+            )
+        """)
+        _conn.commit()
+    return _conn
+
 
 def init_cache() -> None:
-    """Initialize SQLite cache database for email embeddings."""
-    CACHE_DIR.mkdir(exist_ok=True)
-
-    conn = sqlite3.connect(CACHE_DB)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS email_embeddings (
-            email_id TEXT PRIMARY KEY,
-            sender TEXT NOT NULL,
-            subject TEXT NOT NULL,
-            body_preview TEXT,
-            embedding BLOB NOT NULL,
-            timestamp TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
+    _get_conn()
 
 
 def cache_email(email: Email, embedding: np.ndarray) -> None:
-    """Store email with its embedding in cache."""
-    init_cache()
-
-    conn = sqlite3.connect(CACHE_DB)
-    cursor = conn.cursor()
-    cursor.execute("""
+    conn = _get_conn()
+    conn.execute("""
         INSERT OR REPLACE INTO email_embeddings
         (email_id, sender, subject, body_preview, embedding, timestamp)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -44,43 +45,42 @@ def cache_email(email: Email, embedding: np.ndarray) -> None:
         email.subject,
         email.body[:500] if email.body else "",
         embedding.tobytes(),
-        email.timestamp
+        email.timestamp,
     ))
     conn.commit()
-    conn.close()
 
 
 def is_cached(email_id: str) -> bool:
-    """Check if email is already cached."""
-    if not CACHE_DB.exists():
-        return False
-
-    conn = sqlite3.connect(CACHE_DB)
-    cursor = conn.cursor()
-    cursor.execute("SELECT 1 FROM email_embeddings WHERE email_id = ?", (email_id,))
-    result = cursor.fetchone()
-    conn.close()
-    return result is not None
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT 1 FROM email_embeddings WHERE email_id = ?", (email_id,)
+    ).fetchone()
+    return row is not None
 
 
-def get_cached_emails(since_ts: Optional[float] = None) -> List[Tuple[Email, np.ndarray]]:
-    """Retrieve cached emails with their embeddings."""
-    if not CACHE_DB.exists():
-        return []
+def get_cached_embedding(email_id: str) -> Optional[np.ndarray]:
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT embedding FROM email_embeddings WHERE email_id = ?", (email_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    return np.frombuffer(row[0], dtype=np.float32)
 
-    conn = sqlite3.connect(CACHE_DB)
-    cursor = conn.cursor()
 
+def get_cached_emails(since_ts: Optional[str] = None) -> List[Tuple[Email, np.ndarray]]:
+    conn = _get_conn()
     if since_ts is None:
-        cursor.execute("SELECT email_id, sender, subject, body_preview, embedding, timestamp FROM email_embeddings")
+        rows = conn.execute(
+            "SELECT email_id, sender, subject, body_preview, embedding, timestamp FROM email_embeddings"
+        ).fetchall()
     else:
-        cursor.execute(
-            "SELECT email_id, sender, subject, body_preview, embedding, timestamp FROM email_embeddings WHERE timestamp >= ?",
+        # ISO 8601 timestamps compare correctly as strings
+        rows = conn.execute(
+            "SELECT email_id, sender, subject, body_preview, embedding, timestamp "
+            "FROM email_embeddings WHERE timestamp >= ?",
             (since_ts,)
-        )
-
-    rows = cursor.fetchall()
-    conn.close()
+        ).fetchall()
 
     result = []
     for email_id, sender, subject, body_preview, embedding_bytes, timestamp in rows:
@@ -89,7 +89,7 @@ def get_cached_emails(since_ts: Optional[float] = None) -> List[Tuple[Email, np.
             sender=sender,
             subject=subject,
             body=body_preview,
-            timestamp=timestamp
+            timestamp=timestamp,
         )
         embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
         result.append((email, embedding))
@@ -98,6 +98,9 @@ def get_cached_emails(since_ts: Optional[float] = None) -> List[Tuple[Email, np.
 
 
 def clear_cache() -> None:
-    """Clear the entire cache (for testing/reset)."""
+    global _conn
+    if _conn is not None:
+        _conn.close()
+        _conn = None
     if CACHE_DB.exists():
         CACHE_DB.unlink()

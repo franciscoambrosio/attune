@@ -7,7 +7,7 @@ from attune.models.context import CalendarContext, DayBusyness, Milestone
 
 MILESTONE_KEYWORDS = [
     "defense", "viva", "deadline", "submission", "exam",
-    "interview", "conference", "grant", "review", "defense",
+    "interview", "conference", "grant", "review",
 ]
 
 

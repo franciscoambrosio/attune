@@ -1,7 +1,9 @@
+import logging
 import subprocess
 import sys
 import time
 from datetime import datetime
+from typing import List
 
 import click
 from dotenv import load_dotenv
@@ -11,8 +13,10 @@ load_dotenv()
 from attune.agent.judge import TriageAgent
 from attune.connectors.calendar import fetch_calendar_context
 from attune.connectors.gmail import fetch_emails_since, fetch_todays_emails
-from attune.models.email import TriageLabel
+from attune.models.email import Email, TriageLabel
 from attune.monitor import load_state, save_state, update_state
+
+log = logging.getLogger("attune")
 
 LABEL_ICON = {
     TriageLabel.URGENT: "🔴",
@@ -21,6 +25,41 @@ LABEL_ICON = {
     TriageLabel.IGNORE: "⚪",
 }
 LABEL_ORDER = [TriageLabel.URGENT, TriageLabel.SOON, TriageLabel.LATER, TriageLabel.IGNORE]
+
+
+def _build_history(emails: List[Email], history_days: int, use_mock: bool) -> dict[str, List[Email]]:
+    """Build email history once, return a mapping of email_id -> relevant past emails."""
+    try:
+        from attune.cache import init_cache, get_cached_emails
+        from attune.retrieval import embed_and_cache_emails, retrieve_similar_emails
+
+        init_cache()
+        cached = get_cached_emails()
+
+        if not use_mock:
+            from attune.connectors.gmail import fetch_emails_since_date
+            fresh = fetch_emails_since_date(days=history_days, max_results=100)
+            cached_ids = {e.id for e, _ in cached}
+            new_emails = [e for e in fresh if e.id not in cached_ids]
+            new_embeddings = embed_and_cache_emails(new_emails)
+            all_with_embeddings = cached + new_embeddings
+        else:
+            all_with_embeddings = embed_and_cache_emails(emails)
+
+        history = {}
+        for email in emails:
+            candidates = [(e, emb) for e, emb in all_with_embeddings if e.id != email.id]
+            if not candidates:
+                history[email.id] = []
+                continue
+            past_list = [e for e, _ in candidates]
+            past_emb = [emb for _, emb in candidates]
+            history[email.id] = retrieve_similar_emails(email, past_list, past_emb, top_k=3)
+
+        return history
+    except Exception as exc:
+        log.warning("Email history retrieval failed: %s", exc)
+        return {}
 
 
 @click.group()
@@ -50,16 +89,18 @@ def digest(max_emails, mock, history_days):
         click.echo("No unread emails today.")
         return
 
+    click.echo("Building email history...")
+    history = _build_history(emails, history_days, use_mock=mock)
+
     results = []
     with click.progressbar(emails, label="Triaging") as bar:
         for email in bar:
-            result = agent.triage(email, context, history_days=history_days)
+            past_emails = history.get(email.id, [])
+            result = agent.triage(email, context, past_emails=past_emails)
             results.append((email, result))
 
-    # sort by label priority
     results.sort(key=lambda x: LABEL_ORDER.index(x[1].label))
 
-    # header
     today = datetime.now().strftime("%a %b %-d")
     week = " ".join(d.busyness[0].upper() for d in context.week_ahead)
     milestones = "  ·  ".join(
@@ -85,7 +126,6 @@ def digest(max_emails, mock, history_days):
         if result.label == TriageLabel.URGENT:
             _notify(f"URGENT: {email.subject}", result.reasoning)
 
-    # summary
     counts = {l: sum(1 for _, r in results if r.label == l) for l in LABEL_ORDER}
     parts = []
     if counts[TriageLabel.URGENT]:
@@ -117,7 +157,10 @@ def watch(interval, mock, history_days):
 
     if mock:
         from attune.connectors.mock import mock_emails, mock_calendar_context
-        _watch_pass(agent, mock_emails(), mock_calendar_context(), state, history_days=history_days, is_mock=True)
+        emails = mock_emails()
+        context = mock_calendar_context()
+        history = _build_history(emails, history_days, use_mock=True)
+        _watch_pass(agent, emails, context, history)
         click.echo("\n  Mock mode: no further emails to poll. Ctrl+C to exit.")
         while True:
             time.sleep(60)
@@ -132,7 +175,8 @@ def watch(interval, mock, history_days):
                 new     = [e for e in emails if e.id not in state["seen_ids"]]
 
                 if new:
-                    _watch_pass(agent, new, context, state, history_days=history_days, is_mock=False)
+                    history = _build_history(new, history_days, use_mock=False)
+                    _watch_pass(agent, new, context, history)
                 else:
                     click.echo(f"  [{now_str}] No new emails.", err=False)
 
@@ -148,13 +192,14 @@ def watch(interval, mock, history_days):
         click.echo("\n  Watch stopped.")
 
 
-def _watch_pass(agent, emails, context, state, *, history_days=30, is_mock: bool):
+def _watch_pass(agent, emails, context, history):
     now_str = datetime.now().strftime("%H:%M:%S")
     click.echo(f"  [{now_str}] {len(emails)} new email(s):")
 
     for email in emails:
         try:
-            result = agent.triage(email, context, history_days=history_days)
+            past_emails = history.get(email.id, [])
+            result = agent.triage(email, context, past_emails=past_emails)
         except Exception as exc:
             click.echo(f"    ✗ triage failed for {email.id}: {exc}", err=True)
             continue

@@ -1,6 +1,4 @@
 import base64
-import os
-import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -33,15 +31,12 @@ def _get_credentials() -> Credentials:
     return creds
 
 
-def fetch_emails_since(after_ts: int, max_results: int = 50) -> list[Email]:
-    """Fetch unread emails newer than after_ts (Unix seconds)."""
+def _fetch_emails(query: str, max_results: int) -> list[Email]:
     creds = _get_credentials()
     service = build("gmail", "v1", credentials=creds)
 
     result = service.users().messages().list(
-        userId="me",
-        q=f"is:unread after:{after_ts}",
-        maxResults=max_results,
+        userId="me", q=query, maxResults=max_results
     ).execute()
 
     messages = result.get("messages", [])
@@ -64,73 +59,20 @@ def fetch_emails_since(after_ts: int, max_results: int = 50) -> list[Email]:
         ))
 
     return emails
+
+
+def fetch_emails_since(after_ts: int, max_results: int = 50) -> list[Email]:
+    return _fetch_emails(f"is:unread after:{after_ts}", max_results)
 
 
 def fetch_emails_since_date(days: int = 30, max_results: int = 100) -> list[Email]:
-    """Fetch emails from the last N days (for history/retrieval context)."""
-    creds = _get_credentials()
-    service = build("gmail", "v1", credentials=creds)
-
-    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y/%m/%d")
-    query = f"after:{cutoff_date}"
-
-    result = service.users().messages().list(
-        userId="me", q=query, maxResults=max_results
-    ).execute()
-
-    messages = result.get("messages", [])
-    emails = []
-
-    for msg in messages:
-        full = service.users().messages().get(
-            userId="me", messageId=msg["id"], format="full"
-        ).execute()
-
-        headers = {h["name"]: h["value"] for h in full["payload"]["headers"]}
-        body = _extract_body(full["payload"])
-
-        emails.append(Email(
-            id=msg["id"],
-            sender=headers.get("From", ""),
-            subject=headers.get("Subject", "(no subject)"),
-            body=body[:2000],
-            timestamp=headers.get("Date", ""),
-        ))
-
-    return emails
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y/%m/%d")
+    return _fetch_emails(f"after:{cutoff}", max_results)
 
 
 def fetch_todays_emails(max_results: int = 50) -> list[Email]:
-    creds = _get_credentials()
-    service = build("gmail", "v1", credentials=creds)
-
     today = datetime.now(timezone.utc).strftime("%Y/%m/%d")
-    query = f"after:{today} is:unread"
-
-    result = service.users().messages().list(
-        userId="me", q=query, maxResults=max_results
-    ).execute()
-
-    messages = result.get("messages", [])
-    emails = []
-
-    for msg in messages:
-        full = service.users().messages().get(
-            userId="me", messageId=msg["id"], format="full"
-        ).execute()
-
-        headers = {h["name"]: h["value"] for h in full["payload"]["headers"]}
-        body = _extract_body(full["payload"])
-
-        emails.append(Email(
-            id=msg["id"],
-            sender=headers.get("From", ""),
-            subject=headers.get("Subject", "(no subject)"),
-            body=body[:2000],
-            timestamp=headers.get("Date", ""),
-        ))
-
-    return emails
+    return _fetch_emails(f"after:{today} is:unread", max_results)
 
 
 def _extract_body(payload: dict) -> str:
@@ -139,7 +81,6 @@ def _extract_body(payload: dict) -> str:
             if part["mimeType"] == "text/plain":
                 data = part["body"].get("data", "")
                 return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
-        # fallback: recurse into first part
         return _extract_body(payload["parts"][0])
     data = payload.get("body", {}).get("data", "")
     if data:

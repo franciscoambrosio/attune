@@ -106,17 +106,13 @@ Learned value-of-information estimation for personal communication. Combined wit
 
 ---
 
-## 3. Real-time monitoring
+## 3. Real-time monitoring ✅
 
-**Current state:** batch digest — run manually, get a snapshot.
+Implemented as `attune watch`. Polls every N minutes, triages new emails on arrival, and fires desktop notifications for URGENT.
 
-**What's needed:** continuous monitoring — new email arrives → score it → notify if URGENT within minutes.
-
-**Approach:**
-- Gmail push notifications via Pub/Sub (webhooks) or polling every N minutes
-- Score immediately on arrival
-- URGENT → push notification to phone
-- Others → queue for next digest
+**Future improvements:**
+- Gmail push notifications via Pub/Sub (webhooks) instead of polling
+- Mobile push notifications (phone, not just desktop)
 
 ---
 
