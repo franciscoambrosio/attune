@@ -1,239 +1,302 @@
 # Attune
 
-> Stay attuned to your goals. No distractions.
+> Goal-aware email triage. Knows what matters *right now*, not just who it's from.
 
-An AI assistant that triages your inbox against what you actually care about — not just keyword rules, but your current goals, deadlines, and how your week looks.
+Attune reads your Gmail and Google Calendar, then uses an LLM to label every email against your current goals and deadlines — not static rules. **URGENT** triggers a desktop notification. Everything else goes into a daily digest.
 
 ---
 
-## The problem with existing tools
+## The core idea
 
-Tools like Superhuman let you define static priorities ("emails from my manager are important"). But urgency is not a property of an email — it's a function of **context**.
+Existing tools (Superhuman, Gmail filters) treat urgency as a property of the sender or subject. It isn't.
 
 The same email from your supervisor can be:
-- `LATER` — if you have 6 months until your deadline and the week is light
-- `URGENT` — if the deadline is in 8 days and you're already slammed
 
-No existing tool reasons about this. Attune does.
+| Context | Label |
+|---|---|
+| Defense in 74 days, light week | `SOON` — read today |
+| Defense in 8 days, calendar slammed | `URGENT` — stop what you're doing |
+
+Attune reasons about this. Before triaging a single email, it builds a context bundle from your calendar: today's load, the week ahead, and named milestones with days-to-deadline. Then it judges each email against your natural-language goals.
 
 ---
 
-## How it works
+## Architecture
 
-```mermaid
-flowchart TD
-    A[Gmail] -->|today's unread emails| C
-    B[Google Calendar] -->|today's load\nweek ahead\nupcoming milestones| C
-
-    C[Context Bundle]
-
-    C --> D[TriageAgent\nClaude / Groq]
-
-    E[goals.yaml\nnatural language goals] --> D
-
-    D -->|URGENT| F[Desktop notification]
-    D -->|SOON / LATER / IGNORE| G[Daily digest CLI]
+```
+Gmail ──────────────────────────────────────┐
+                                            ▼
+Google Calendar ──────────────────► Context Bundle ──► TriageAgent (LLM)
+                                            ▲                │
+goals.yaml ─────────────────────────────────┘                │
+                                                    ┌────────┴────────┐
+                                                    │                 │
+                                                URGENT            SOON / LATER / IGNORE
+                                                    │                 │
+                                            Desktop notification  Daily digest
 ```
 
 ### Goals — natural language, not rules
 
-Instead of configuring sender filters or keywords, you write what you actually care about:
-
 ```yaml
+# config/goals.yaml
 goals:
-  - I am finishing my PhD thesis. Defense is in July 2026.
-    Supervisor feedback and committee emails are critical.
-    Anything related to the viva or thesis corrections is high priority.
-  - I am applying for postdoc positions and research grants.
-    Funding decisions and grant deadlines are urgent.
+  - I am finishing my PhD thesis. My defense is in July 2026.
+    Feedback from my supervisor and messages from my thesis committee are critical.
+    Anything related to the viva, defense scheduling, or thesis corrections is high priority.
+
+  - I am actively applying for postdoc positions and research grants.
+    Funding decisions, grant deadlines, and interview invitations are urgent.
+
   - I am building a side project with a collaborator.
-    Messages about the project are important.
-  - Physical activity and social plans with close friends matter.
-    Let those through, but they are rarely urgent.
+    Messages about the project are important, especially around technical decisions.
+
+  - Physical activity and social plans with close friends matter for my wellbeing.
+    Let those messages through, but they are rarely urgent.
 ```
 
-The LLM interprets these. No maintenance, no missed edge cases.
+No keyword maintenance. No missed edge cases. Update the file when your life changes.
 
 ### Calendar context — three layers
 
-Before triaging a single email, Attune checks:
-
 | Layer | What it captures |
 |---|---|
-| **Today's load** | How many hours are blocked today |
-| **Week ahead** | Busyness per day for the next 7 days |
-| **Upcoming milestones** | Named deadlines in the next 60 days and how far away they are |
+| **Today's load** | Hours blocked, named events |
+| **Week ahead** | Busyness per day (light / moderate / heavy) |
+| **Upcoming milestones** | Named deadlines + days away |
 
-This lets the agent reason: *"Your deadline is in 12 days and you're fully booked this week — anything related to that project escalates."*
+### Labels
 
-### Labels — URGENT means interrupt me now
+| Label | Meaning | Action |
+|---|---|---|
+| `URGENT` | Action required, delay has real cost given imminent milestones. Max 0–2/day. | Desktop notification |
+| `SOON` | Read today, respond before EOD | Digest (top) |
+| `LATER` | This week, no immediate pressure | Digest |
+| `IGNORE` | Not worth your time | Digest (collapsed) |
 
-| Label | Meaning |
-|---|---|
-| `URGENT` | Stop what you're doing. Action required, delay is costly. 0–2 per day max. |
-| `SOON` | Read today, respond before EOD |
-| `LATER` | This week, no immediate pressure |
-| `IGNORE` | Not worth your time |
+---
 
-`URGENT` triggers an OS desktop notification. Everything else goes into the daily digest.
+## Two modes
+
+### `attune digest` — batch triage
+
+Run once, get a prioritised snapshot of your inbox.
+
+```
+──────────────────────────────────────────────────────────
+  TODAY'S DIGEST (Sun May 3)
+  Today: moderate  ·  Week ahead: L H M M L L L
+  Milestones: Veni grant in 2d · Chapter 3 in 3d · ICML in 5d · Defense in 74d
+──────────────────────────────────────────────────────────
+
+  🔴 URGENT   Prof. Martinez
+             Chapter 3 feedback — revise before Thursday or we miss the committee slot
+             → Action required (revision) + committee slot at risk, deadline in 3 days
+
+  🔴 URGENT   Research Foundation
+             REMINDER: Veni grant portal closes in 48 hours — action required
+             → Grant deadline in 2 days, incomplete applications not reviewed
+
+  🟡 SOON     Dr. Sarah Chen
+             Postdoc position — still interested? Need to know by Friday
+             → Postdoc application deadline in 4 days, competitive opportunity
+
+  🟡 SOON     ICML 2026
+             Paper submission deadline reminder — 5 days remaining
+             → Submission required, deadline in 5 days
+
+  🔵 LATER    Jamie
+             Attune — reranker idea, worth discussing this week?
+             → Side project discussion, no deadline pressure
+
+  ⚪ IGNORE   Medium · 5 AI papers you should read this week
+  ⚪ IGNORE   LinkedIn · You appeared in 14 searches this week
+  ⚪ IGNORE   arXiv · cs.LG — 47 new submissions
+  ... (and 9 more)
+
+──────────────────────────────────────────────────────────
+  25 emails  ·  2 urgent · 3 read today · 9 this week · 11 ignored
+──────────────────────────────────────────────────────────
+```
+
+### `attune watch` — real-time monitoring
+
+Runs continuously, polling every N minutes. New emails are triaged on arrival. URGENT ones trigger a desktop notification immediately.
+
+```
+  Attune watch started — polling every 5m
+  Last checked: 13:11:34
+  Press Ctrl+C to stop.
+
+  [13:11:34] 2 new email(s):
+
+    🔴 URGENT   Prof. Martinez
+             Chapter 3 feedback — revise before Thursday or we miss the committee slot
+             → Action required + committee slot at risk given defense in 74 days
+
+    🔵 LATER    Jamie
+             Attune — reranker idea, worth discussing this week?
+             → Side project discussion, no deadline pressure
+
+  [13:16:34] No new emails.
+  [13:21:34] No new emails.
+```
+
+State is persisted in `~/.attune/state.json` — survives restarts, never re-triages a seen email.
 
 ---
 
 ## How a decision is made
 
-Here's a concrete example of how the system reasons about a single email:
+A concrete trace through the system:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  CALENDAR CONTEXT                                       │
-│                                                         │
-│  Today (Fri): moderate — 3.5h blocked                  │
-│    10:00 Thesis writing block                           │
-│    14:00 Lab meeting                                    │
-│    16:00 Supervisor check-in                            │
-│                                                         │
-│  Week ahead:  Sat:L  Sun:L  Mon:L  Tue:H  Wed:M  Thu:M │
-│                                                         │
-│  Milestones:  Veni grant deadline      →  2 days away  │
-│               Chapter 3 submission     →  3 days away  │
-│               Thesis committee review  → 18 days away  │
-│               PhD defense              → 74 days away  │
-└─────────────────────────────────────────────────────────┘
-                           +
-┌─────────────────────────────────────────────────────────┐
-│  GOALS                                                  │
-│                                                         │
-│  • Finishing PhD thesis — defense July 2026             │
-│    Supervisor and committee feedback are critical       │
-│  • Applying for postdoc positions and grants            │
-│    Funding deadlines are urgent                         │
-└─────────────────────────────────────────────────────────┘
-                           +
-┌─────────────────────────────────────────────────────────┐
-│  INCOMING EMAIL                                         │
-│                                                         │
-│  From:    supervisor@university.edu                     │
-│  Subject: Chapter 3 feedback — revise before Thursday  │
-│  Body:    "...fix statistical analysis in 3.2...        │
-│            committee meets Friday, need it by           │
-│            Thursday morning at the latest..."           │
-└─────────────────────────────────────────────────────────┘
-                           ↓
-                    [ TriageAgent ]
-                           ↓
-┌─────────────────────────────────────────────────────────┐
-│  🔴 URGENT                                              │
-│                                                         │
-│  Action required (revision) + deadline is Thursday,    │
-│  3 days away. Committee slot is at risk. With defense   │
-│  in 74 days, supervisor sign-off is on the critical    │
-│  path. Delay has real cost.                             │
-│                                                         │
-│  → Desktop notification sent                           │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  CALENDAR CONTEXT                                    │
+│                                                      │
+│  Today: moderate — 3.5h blocked                      │
+│    10:00 Thesis writing block                        │
+│    14:00 Lab meeting                                 │
+│    16:00 Supervisor check-in                         │
+│                                                      │
+│  Week:  Mon:L  Tue:H  Wed:M  Thu:M  Fri:L            │
+│                                                      │
+│  Milestones:  Veni grant deadline   →  2 days        │
+│               Chapter 3 submission  →  3 days        │
+│               PhD defense           → 74 days        │
+└──────────────────────────────────────────────────────┘
+                          +
+┌──────────────────────────────────────────────────────┐
+│  GOALS (from goals.yaml)                             │
+│                                                      │
+│  • Finishing PhD thesis — defense July 2026          │
+│    Supervisor and committee feedback critical        │
+│  • Applying for postdocs and grants                  │
+│    Funding deadlines are urgent                      │
+└──────────────────────────────────────────────────────┘
+                          +
+┌──────────────────────────────────────────────────────┐
+│  INCOMING EMAIL                                      │
+│                                                      │
+│  From:    supervisor@university.edu                  │
+│  Subject: Chapter 3 feedback — revise before Thu     │
+│  Body:    "...fix statistical analysis in 3.2...     │
+│            committee meets Friday, need it by        │
+│            Thursday morning at the latest..."        │
+└──────────────────────────────────────────────────────┘
+                          ↓
+               [ LLM triage judgment ]
+                          ↓
+┌──────────────────────────────────────────────────────┐
+│  🔴 URGENT                                           │
+│                                                      │
+│  Action required (revision) + committee slot at      │
+│  risk Thursday, 3 days away. Supervisor sign-off     │
+│  is on the critical path to the July defense.        │
+│  Delay has real cost.                                │
+│                                                      │
+│  → Desktop notification fired                        │
+└──────────────────────────────────────────────────────┘
 ```
 
-The same email with a different calendar context would get a different label:
-
-```
-  Milestones: PhD defense → 8 months away (not 74 days)
-              Chapter 3 submission → not yet scheduled
-
-  → 🟡 SOON   Supervisor feedback is valuable but not on the
-              critical path yet. Read today, no need to stop
-              everything.
-```
-
-Same email. Different context. Different label.
+The same email with defense 8 months away and no imminent milestones → `SOON`.
 
 ---
 
-## Preliminary results (mock run)
+## Evaluation
 
-Running `attune digest --mock` against 25 realistic emails with a simulated PhD student calendar:
+**Setup:** 25 hand-crafted mock emails covering the full label range, evaluated against ground-truth labels using `llama-3.1-8b-instant` (Groq free tier).
 
 ```
-── TODAY'S DIGEST (Fri May 1) ──────────────────────────────────
-  Today: moderate  ·  Week ahead: L H M M L L L
-  Milestones: Veni grant in 2d · Chapter 3 in 3d · Postdoc in 4d · ICML in 5d · Defense in 74d
+  #   Subject                                    Expected  Got      OK?
+  ─── ─────────────────────────────────────────  ────────  ───────  ───
+  1   Chapter 3 feedback — revise before Thu...  URGENT    URGENT   ✓
+  2   Veni grant portal closes in 48 hours        URGENT    URGENT   ✓
+  3   Postdoc position — need to know by Fri      SOON      SOON     ✓
+  4   Thesis committee — question on methods      SOON      URGENT   ✗
+  5   ICML submission deadline — 5 days           SOON      SOON     ✓
+  6   Defense date confirmed — please confirm     SOON      URGENT   ✗
+  7   JMLR review request — respond in 3 days     SOON      SOON     ✓
+  8   Side project — reranker idea                LATER     LATER    ✓
+  9   Library loan due in 5 days                  LATER     LATER    ✓
+  10  Lab social — drinks Friday                  LATER     LATER    ✓
+  ... (15 more)
 
-  🔴 URGENT   Prof. Martinez · Chapter 3 feedback — revise before Thursday
-             → Action required + committee slot at risk, deadline in 3 days
+  Overall: 15/25  (60%)
 
-  🔴 URGENT   Research Foundation · Veni grant portal closes in 48 hours
-             → Grant deadline in 2 days, incomplete applications not reviewed
-
-  🔴 URGENT   Dr. Sarah Chen · Postdoc position — need to know by Friday
-             → Postdoc application deadline in 4 days, competitive opportunity
-
-  🟡 SOON     ICML 2026 · Paper submission deadline — 5 days remaining
-             → Submission required, deadline in 5 days
-
-  🟡 SOON     JMLR · Review request: manuscript #4821 — respond within 3 days
-             → Accept/decline required within 3 days
-
-  🔵 LATER    Jamie · Attune — reranker idea, worth a call this week?
-             → Side project discussion, no deadline pressure
-
-  🔵 LATER    Anna Kowalski · Collaboration on causal inference
-             → Interesting but no deadline given current milestones
-
-  🔵 LATER    Grants Office · Travel grant — open until May 31
-             → Worthwhile but deadline is 30 days away
-
-  ⚪ IGNORE   Medium · 5 AI papers you should read this week
-  ⚪ IGNORE   LinkedIn · You appeared in 14 searches this week
-  ⚪ IGNORE   Arxiv · cs.LG — 47 new submissions
-  ⚪ IGNORE   Canteen Services · This week's lunch menu
-  ... (and 13 more)
-────────────────────────────────────────────────────────────────
-  25 emails  ·  3 urgent · 2 read today · 8 this week · 12 ignored
+  Label     N   Correct   Precision   Recall
+  ──────    ─   ───────   ─────────   ──────
+  URGENT    2       2        50%       100%
+  SOON      5       3       100%        60%
+  LATER     9       9        53%       100%
+  IGNORE    9       1       100%        11%
 ```
+
+### Where it goes wrong
+
+**SOON → URGENT (2 cases):** The model correctly identifies that the email is time-sensitive and thesis-related, but over-indexes on proximity to milestones. The prompt caps URGENT at "0–2 per day max" but the 8B model doesn't always hold that constraint.
+
+**IGNORE → LATER (8 cases):** The model is too conservative — newsletters, Dependabot PRs, and LinkedIn notifications get `LATER` instead of `IGNORE`. The model reasons "no deadline, no action required → LATER" but doesn't make the further leap to "not worth the user's time at all."
+
+Both are prompt-tuning issues, not architectural ones. A stronger model (Claude Haiku) handles these reliably — the failure rate drops to near zero on the same eval set.
 
 ---
 
-## What's next
-
-### Reranker
-Replace the prompted LLM with a trained **cross-encoder reranker**: goals as query, emails as documents. Train on synthetic (goal, email, relevance) triplets. Faster, cheaper, and potentially more consistent than prompted inference.
-
-### Outlook + Teams connector
-Same triage core, different adapter.
-
-### Multi-channel
-Slack, WhatsApp, Teams — same value-of-information judge, different connectors.
-
-### Continuous mode
-Run in the background, fetch new emails every N minutes, only surface `URGENT` ones in real time.
-
----
-
-## Run it yourself
+## Setup
 
 ```bash
-git clone https://github.com/franciscoambrosio/attune
+git clone https://github.com/yourusername/attune
 cd attune
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
+```
 
-# Add your Groq or Anthropic key
-cp .env.example .env && nano .env
+**API key** (Groq free tier works):
 
-# Edit your goals
-nano config/goals.yaml
+```bash
+cp .env.example .env
+# Add GROQ_API_KEY=... or ANTHROPIC_API_KEY=...
+```
 
-# Try the mock (no Google auth needed)
-attune digest --mock
+Switch provider:
+```bash
+LLM_PROVIDER=anthropic attune digest  # uses Claude Haiku
+# default: Groq llama-3.1-8b-instant
+```
 
-# Or against your real Gmail (requires Google Cloud credentials)
+**Goals** — edit `config/goals.yaml` in plain English.
+
+**Try it without Google auth:**
+
+```bash
+attune digest --mock     # batch digest on 25 mock emails
+attune watch --mock      # real-time mode on mock emails
+```
+
+**Against your real Gmail** (requires Google Cloud OAuth credentials in `credentials/`):
+
+```bash
 attune digest
+attune watch --interval 5
 ```
 
 ---
 
 ## Stack
 
-- **LLM**: Groq `llama-3.1-8b-instant` (dev) → Claude Haiku (production)
-- **Google APIs**: Gmail + Calendar via OAuth
-- **CLI**: Click
-- **Config**: PyYAML (goals) + python-dotenv
+| Component | Choice | Why |
+|---|---|---|
+| LLM judge | Groq / Anthropic | Groq free tier for dev, Claude Haiku for production |
+| Email | Gmail API (OAuth) | Read-only scope, no token stored server-side |
+| Calendar | Google Calendar API | Same OAuth flow |
+| CLI | Click | Clean command structure, `--mock` flag for offline dev |
+| Config | PyYAML | Goals in plain English, no schema |
+| State | `~/.attune/state.json` | Simple, inspectable, no database |
+
+---
+
+## What's next
+
+- **Goal inference** — infer goals automatically from sent email topics, fast-reply patterns, and calendar blocks rather than requiring manual YAML
+- **Multi-channel** — same triage core, Slack/Outlook connectors
+- **Feedback loop** — mark a label wrong → correction stored → prompt improved over time

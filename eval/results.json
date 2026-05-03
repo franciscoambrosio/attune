@@ -1,0 +1,235 @@
+{
+  "timestamp": "2026-05-03T13:16:45.762360",
+  "model": "groq",
+  "total": 25,
+  "correct": 15,
+  "accuracy": 0.6,
+  "per_label": {
+    "URGENT": {
+      "expected": 2,
+      "correct": 2,
+      "precision": 0.5,
+      "recall": 1.0
+    },
+    "SOON": {
+      "expected": 5,
+      "correct": 3,
+      "precision": 1.0,
+      "recall": 0.6
+    },
+    "LATER": {
+      "expected": 9,
+      "correct": 9,
+      "precision": 0.5294,
+      "recall": 1.0
+    },
+    "IGNORE": {
+      "expected": 9,
+      "correct": 1,
+      "precision": 1.0,
+      "recall": 0.1111
+    }
+  },
+  "emails": [
+    {
+      "id": "mock-001",
+      "subject": "Chapter 3 feedback \u2014 revise before Thursday or we miss the committee slot",
+      "expected": "URGENT",
+      "predicted": "URGENT",
+      "correct": true,
+      "reasoning": "The email requires an action from the user (revision of Chapter 3) and waiting even a day has meaningful negative consequences given the upcoming thesis committee review in 18d, but more critically, the immediate deadline of Thursday for the committee slot."
+    },
+    {
+      "id": "mock-002",
+      "subject": "REMINDER: Veni grant portal closes in 48 hours \u2014 action required",
+      "expected": "URGENT",
+      "predicted": "URGENT",
+      "correct": true,
+      "reasoning": "The Veni grant deadline is in 2 days, and incomplete applications will not be reviewed, requiring immediate action to avoid missing the opportunity."
+    },
+    {
+      "id": "mock-003",
+      "subject": "Postdoc position \u2014 still interested? Need to know by Friday",
+      "expected": "SOON",
+      "predicted": "SOON",
+      "correct": true,
+      "reasoning": "The postdoc application with Dr. Chen has a deadline in 4 days, and a response is required to avoid missing the opportunity."
+    },
+    {
+      "id": "mock-004",
+      "subject": "Re: Thesis committee \u2014 question about your methods section",
+      "expected": "SOON",
+      "predicted": "URGENT",
+      "correct": false,
+      "reasoning": "The email requires an action from the user (clarifying thesis methods) and waiting even a day has meaningful negative consequences given the upcoming thesis committee review in 18d."
+    },
+    {
+      "id": "mock-005",
+      "subject": "Paper submission deadline reminder \u2014 5 days remaining",
+      "expected": "SOON",
+      "predicted": "SOON",
+      "correct": true,
+      "reasoning": "The ICML submission deadline is in 5 days, requiring action from the user to complete the submission."
+    },
+    {
+      "id": "mock-006",
+      "subject": "Defense date confirmed \u2014 July 14, 2026 \u2014 please confirm receipt",
+      "expected": "SOON",
+      "predicted": "URGENT",
+      "correct": false,
+      "reasoning": "The email requires confirmation of receipt and mentions a deadline for final thesis submission, which has real cost given the upcoming PhD defense."
+    },
+    {
+      "id": "mock-007",
+      "subject": "Review request: manuscript #4821 \u2014 response needed within 3 weeks",
+      "expected": "SOON",
+      "predicted": "SOON",
+      "correct": true,
+      "reasoning": "The email requires an action from the user (accept or decline the review) and waiting even a day has some negative consequences given the upcoming ICML submission deadline in 5 days."
+    },
+    {
+      "id": "mock-008",
+      "subject": "Attune \u2014 reranker idea, worth discussing this week?",
+      "expected": "LATER",
+      "predicted": "LATER",
+      "correct": true,
+      "reasoning": "The email is related to the side project, but there's no immediate pressure to discuss the idea this week."
+    },
+    {
+      "id": "mock-009",
+      "subject": "Loan reminder: 3 items due in 5 days",
+      "expected": "LATER",
+      "predicted": "LATER",
+      "correct": true,
+      "reasoning": "The loan reminder does not require immediate action and does not impact any upcoming deadlines."
+    },
+    {
+      "id": "mock-010",
+      "subject": "Lab social \u2014 drinks Friday evening?",
+      "expected": "LATER",
+      "predicted": "LATER",
+      "correct": true,
+      "reasoning": "Physical activity and social plans with close friends matter for wellbeing, but there's no immediate pressure to respond."
+    },
+    {
+      "id": "mock-011",
+      "subject": "Distinguished Lecture: Prof. Yoshua Bengio \u2014 next Tuesday 15:00",
+      "expected": "LATER",
+      "predicted": "LATER",
+      "correct": true,
+      "reasoning": "The event announcement does not require an action from the user and does not have meaningful negative consequences given upcoming milestones."
+    },
+    {
+      "id": "mock-012",
+      "subject": "NeurIPS 2026 \u2014 abstract registration opens May 15",
+      "expected": "LATER",
+      "predicted": "LATER",
+      "correct": true,
+      "reasoning": "The email is informational about a conference, and the deadline for abstract registration is not until May 15, which is in 12 days."
+    },
+    {
+      "id": "mock-013",
+      "subject": "Re: Collaboration on causal inference \u2014 catching up",
+      "expected": "LATER",
+      "predicted": "LATER",
+      "correct": true,
+      "reasoning": "The email is related to a side project, but there's no immediate pressure or deadline mentioned."
+    },
+    {
+      "id": "mock-014",
+      "subject": "Scheduled maintenance: university VPN \u2014 Sunday 02:00\u201306:00",
+      "expected": "LATER",
+      "predicted": "LATER",
+      "correct": true,
+      "reasoning": "The IT Services email about university VPN maintenance does not require immediate action and does not impact the user's upcoming PhD milestones."
+    },
+    {
+      "id": "mock-015",
+      "subject": "Your paper has 3 new citations this week",
+      "expected": "LATER",
+      "predicted": "LATER",
+      "correct": true,
+      "reasoning": "This email is informational and does not require an immediate action, given the user's focus on upcoming deadlines and milestones."
+    },
+    {
+      "id": "mock-016",
+      "subject": "Travel grant \u2014 application window open until May 31",
+      "expected": "LATER",
+      "predicted": "LATER",
+      "correct": true,
+      "reasoning": "The email is informational about a grant opportunity, but the deadline is not imminent given the upcoming milestones."
+    },
+    {
+      "id": "mock-017",
+      "subject": "5 AI papers you should read this week",
+      "expected": "IGNORE",
+      "predicted": "LATER",
+      "correct": false,
+      "reasoning": "This email is informational and does not require an action from the user, and there are no upcoming deadlines related to AI papers."
+    },
+    {
+      "id": "mock-018",
+      "subject": "[attune] Dependabot: bump pydantic from 2.7.0 to 2.7.1",
+      "expected": "IGNORE",
+      "predicted": "LATER",
+      "correct": false,
+      "reasoning": "This email is related to a side project, but there's no immediate pressure to address it given the upcoming milestones."
+    },
+    {
+      "id": "mock-019",
+      "subject": "You appeared in 14 searches this week",
+      "expected": "IGNORE",
+      "predicted": "LATER",
+      "correct": false,
+      "reasoning": "This LinkedIn notification is informational and does not require an action from the user, and there are no upcoming deadlines related to it."
+    },
+    {
+      "id": "mock-020",
+      "subject": "Your Overleaf subscription renews in 30 days",
+      "expected": "IGNORE",
+      "predicted": "LATER",
+      "correct": false,
+      "reasoning": "The email is informational and does not require immediate action, given the 30-day renewal notice."
+    },
+    {
+      "id": "mock-021",
+      "subject": "cs.LG new submissions \u2014 47 new papers",
+      "expected": "IGNORE",
+      "predicted": "LATER",
+      "correct": false,
+      "reasoning": "This email is informational and does not require an action from the user, and there are no upcoming deadlines related to the Arxiv Mailing List."
+    },
+    {
+      "id": "mock-022",
+      "subject": "This week's lunch menu",
+      "expected": "IGNORE",
+      "predicted": "LATER",
+      "correct": false,
+      "reasoning": "This message is informational and does not require an immediate action from the user."
+    },
+    {
+      "id": "mock-023",
+      "subject": "Try Slack AI \u2014 summarize channels instantly",
+      "expected": "IGNORE",
+      "predicted": "IGNORE",
+      "correct": true,
+      "reasoning": "This email is not related to any of the user's critical goals or deadlines."
+    },
+    {
+      "id": "mock-024",
+      "subject": "New citations for 'Variational Inference for Sparse GPs'",
+      "expected": "IGNORE",
+      "predicted": "LATER",
+      "correct": false,
+      "reasoning": "This email is informational and does not require an immediate action, given the user's focus on upcoming deadlines."
+    },
+    {
+      "id": "mock-025",
+      "subject": "Cloud recording available: Lab meeting \u2014 Apr 30",
+      "expected": "IGNORE",
+      "predicted": "LATER",
+      "correct": false,
+      "reasoning": "This email is informational and does not require an action from the user, and there are no upcoming deadlines related to the lab meeting."
+    }
+  ]
+}

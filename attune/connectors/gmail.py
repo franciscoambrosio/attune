@@ -32,6 +32,39 @@ def _get_credentials() -> Credentials:
     return creds
 
 
+def fetch_emails_since(after_ts: int, max_results: int = 50) -> list[Email]:
+    """Fetch unread emails newer than after_ts (Unix seconds)."""
+    creds = _get_credentials()
+    service = build("gmail", "v1", credentials=creds)
+
+    result = service.users().messages().list(
+        userId="me",
+        q=f"is:unread after:{after_ts}",
+        maxResults=max_results,
+    ).execute()
+
+    messages = result.get("messages", [])
+    emails = []
+
+    for msg in messages:
+        full = service.users().messages().get(
+            userId="me", messageId=msg["id"], format="full"
+        ).execute()
+
+        headers = {h["name"]: h["value"] for h in full["payload"]["headers"]}
+        body = _extract_body(full["payload"])
+
+        emails.append(Email(
+            id=msg["id"],
+            sender=headers.get("From", ""),
+            subject=headers.get("Subject", "(no subject)"),
+            body=body[:2000],
+            timestamp=headers.get("Date", ""),
+        ))
+
+    return emails
+
+
 def fetch_todays_emails(max_results: int = 50) -> list[Email]:
     creds = _get_credentials()
     service = build("gmail", "v1", credentials=creds)
