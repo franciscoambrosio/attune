@@ -31,7 +31,8 @@ def cli():
 @cli.command()
 @click.option("--max", "max_emails", default=30, help="Max emails to fetch")
 @click.option("--mock", is_flag=True, help="Use mock emails and calendar (no Google auth needed)")
-def digest(max_emails, mock):
+@click.option("--history-days", default=30, help="Days of history to use for context retrieval")
+def digest(max_emails, mock, history_days):
     """Fetch today's Gmail and triage against your goals."""
     if mock:
         from attune.connectors.mock import mock_emails, mock_calendar_context
@@ -52,7 +53,7 @@ def digest(max_emails, mock):
     results = []
     with click.progressbar(emails, label="Triaging") as bar:
         for email in bar:
-            result = agent.triage(email, context)
+            result = agent.triage(email, context, history_days=history_days)
             results.append((email, result))
 
     # sort by label priority
@@ -104,7 +105,8 @@ def digest(max_emails, mock):
 @cli.command()
 @click.option("--interval", default=5, show_default=True, help="Poll interval in minutes")
 @click.option("--mock", is_flag=True, help="Use mock data (runs one pass then idles)")
-def watch(interval, mock):
+@click.option("--history-days", default=30, help="Days of history to use for context retrieval")
+def watch(interval, mock, history_days):
     """Watch inbox continuously and notify on URGENT emails."""
     agent = TriageAgent()
     state = load_state()
@@ -115,7 +117,7 @@ def watch(interval, mock):
 
     if mock:
         from attune.connectors.mock import mock_emails, mock_calendar_context
-        _watch_pass(agent, mock_emails(), mock_calendar_context(), state, is_mock=True)
+        _watch_pass(agent, mock_emails(), mock_calendar_context(), state, history_days=history_days, is_mock=True)
         click.echo("\n  Mock mode: no further emails to poll. Ctrl+C to exit.")
         while True:
             time.sleep(60)
@@ -130,7 +132,7 @@ def watch(interval, mock):
                 new     = [e for e in emails if e.id not in state["seen_ids"]]
 
                 if new:
-                    _watch_pass(agent, new, context, state, is_mock=False)
+                    _watch_pass(agent, new, context, state, history_days=history_days, is_mock=False)
                 else:
                     click.echo(f"  [{now_str}] No new emails.", err=False)
 
@@ -146,13 +148,13 @@ def watch(interval, mock):
         click.echo("\n  Watch stopped.")
 
 
-def _watch_pass(agent, emails, context, state, *, is_mock: bool):
+def _watch_pass(agent, emails, context, state, *, history_days=30, is_mock: bool):
     now_str = datetime.now().strftime("%H:%M:%S")
     click.echo(f"  [{now_str}] {len(emails)} new email(s):")
 
     for email in emails:
         try:
-            result = agent.triage(email, context)
+            result = agent.triage(email, context, history_days=history_days)
         except Exception as exc:
             click.echo(f"    ✗ triage failed for {email.id}: {exc}", err=True)
             continue
